@@ -1,8 +1,8 @@
 # trinity-scraper by max
 import requests
-import browser_cookie3
-import json
+import pdfminer.high_level as pdf
 import re
+# import browser_cookie3
 
 def get_dir():
 	'''grabs the latest directory pdf from trinity website'''
@@ -11,8 +11,14 @@ def get_dir():
 		file.write(response.content) # save the file we just grabbed
 	return
 
-def ingest_pdf():
+def ingest_pdf(pdf_location = 'results/directory.pdf'):
 	'''parses the pdf content into student names and class years'''
+	pdf_blob = pdf.extract_text(pdf_location) # extract all text from dir pdf
+	# print("pdf blob:\n", str(pdf_blob))
+	with open('results/directory_content.txt', 'w', encoding='utf-8') as file:
+		file.write(pdf_blob)
+	# do *some* regex to identify names
+	# current attempt: "(?:\n)[a-zA-Z, ]{1,}(?:\. ){10,}"
 	return
 
 def query_dir(student_name):
@@ -46,9 +52,15 @@ def grab_email(student_name = ["Kendall", "H.", "Brown"]):
 	match = re.search(email_pattern, response.content.decode())
 	return match.group()
 
-def collect_emails():
+def collect_emails(student_list):
 	'''given a list of names, returns a list of emails'''
-	return
+	# student_list is in form student x = [student_name, class_year]
+	for i in range(len(student_list)): # loop over all students
+		# grab email for current student using their full name
+		grabbed_email = grab_email(student_list[i][0])
+		# append their email to the sublist, which will be exported later
+		student_list[i].append(grabbed_email)
+	return student_list # return student list with emails added
 
 def export_results():
 	'''exports the scraped directory as a csv'''
@@ -58,6 +70,7 @@ def main():
 	# get_dir() # download the latest directory as a pdf
 	email = grab_email()
 	print("email grabbed: ", email)
+	ingest_pdf()
 
 if __name__ == '__main__':
 	main()
