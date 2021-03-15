@@ -1,29 +1,10 @@
 # trinity-scraper by max
 import requests
-# import pdfminer.high_level as pdf
 import re
 from string import ascii_lowercase as alpha
 import csv
 from tqdm import tqdm
 from bs4 import BeautifulSoup
-# import browser_cookie3
-
-def get_dir():
-	'''grabs the latest directory pdf from trinity website'''
-	response = requests.get('https://internet3.trincoll.edu/pTools/docs/studph.pdf')
-	with open('results/directory.pdf', 'wb') as file:
-		file.write(response.content) # save the file we just grabbed
-	return
-
-def ingest_pdf(pdf_location = 'results/directory.pdf'):
-	'''parses the pdf content into student names and class years'''
-	pdf_blob = pdf.extract_text(pdf_location) # extract all text from dir pdf
-	# print("pdf blob:\n", str(pdf_blob))
-	with open('results/directory_content.txt', 'w', encoding='utf-8') as file:
-		file.write(pdf_blob)
-	# do *some* regex to identify names
-	# current attempt: "(?:\n)[a-zA-Z, ]{1,}(?:\. ){10,}"
-	return
 
 def query_dir(student_name):
 	'''performs a post request given a url and data, returns response'''
@@ -50,13 +31,6 @@ def grab_email(student_name):
 	'''given the name of student, returns their email'''
 	# student_name is list in format [first, middle, last]
 	response = query_dir(student_name)
-	# # could use bs4 to parse response, but honestly not even necessary
-	# # email_pattern = '(?:mailto:)[a-z.@]+'
-	# # findall isn't working with non-capturing groups for some reason; can just slice
-	# email_pattern = 'mailto:[a-z.@]+'
-	# # search for email that comes after "mailto:"
-	# # match = re.search(email_pattern, response.content.decode())
-	# match = re.findall(email_pattern, response.content.decode()) # find *all* results
 	emails = []
 	# parse response with bs4
 	soup = BeautifulSoup(response.content, features='html.parser')
@@ -109,7 +83,6 @@ def main():
 	print("\n\t---- Trinity Email Scraper by Max ----")
 	student_emails = collect_emails()
 	export_results(student_emails)
-	# print(len(student_emails), " emails successfully exported.")
 	print("\n\t  ", len(student_emails), "emails successfully scraped\n")
 
 if __name__ == '__main__':
