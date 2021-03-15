@@ -5,6 +5,7 @@ import re
 from string import ascii_lowercase as alpha
 import csv
 from tqdm import tqdm
+from bs4 import BeautifulSoup
 # import browser_cookie3
 
 def get_dir():
@@ -49,32 +50,39 @@ def grab_email(student_name):
 	'''given the name of student, returns their email'''
 	# student_name is list in format [first, middle, last]
 	response = query_dir(student_name)
-	# could use bs4 to parse response, but honestly not even necessary
-	# email_pattern = '(?:mailto:)[a-z.@]+'
-	# findall isn't working with non-capturing groups for some reason; can just slice
-	email_pattern = 'mailto:[a-z.@]+'
-	# search for email that comes after "mailto:"
-	# match = re.search(email_pattern, response.content.decode())
-	match = re.findall(email_pattern, response.content.decode()) # find *all* results
-	try: # try to return names (will fail if too many)
-		return match
-	except:
-		return [] # handle no results lazily
+	# # could use bs4 to parse response, but honestly not even necessary
+	# # email_pattern = '(?:mailto:)[a-z.@]+'
+	# # findall isn't working with non-capturing groups for some reason; can just slice
+	# email_pattern = 'mailto:[a-z.@]+'
+	# # search for email that comes after "mailto:"
+	# # match = re.search(email_pattern, response.content.decode())
+	# match = re.findall(email_pattern, response.content.decode()) # find *all* results
+	emails = []
+	# parse response with bs4
+	soup = BeautifulSoup(response.content, features='html.parser')
+	# find all links
+	all_links = soup.find_all(href=True)
+	# remove non emails
+	for i in range(len(all_links)):
+		if ('mailto:' in all_links[i].get('href')):
+			emails.append(all_links[i].get('href'))
+	return emails # will return list of len 0 if too many or none found
 
 def collect_emails():
 	'''given a list of names, returns a list of emails'''
 	student_emails = []
 	# loop over whole alphabet of last name combos
-	for first in tqdm(alpha):
+	for first in tqdm(alpha, desc='Overall'): # label overall progress bar
 		name_fragment = first # build fragment of last name
-		for second in tqdm(alpha):
-			name_fragment += second # build fragment of last name
+		for second in tqdm(alpha, desc=(first.upper()) + ' Names'): # label w curr letter
+			name_fragment = first + second # build fragment of last name
 			# collect emails for each combo and slice off "mailto:"
 			results = grab_email(["", "", name_fragment])
+			# print(name_fragment)
 			if len(results) == 0:
 				# then further break down the alphabet
 				for third in alpha:
-					name_fragment += third # build fragment of last name
+					name_fragment = first + second + third # build fragment of last name
 					# collect emails for each combo and slice off "mailto:"
 					results.extend(grab_email(["", "", name_fragment]))
 				# add all results to master list
@@ -87,10 +95,14 @@ def collect_emails():
 
 def export_results(student_emails):
 	'''exports the scraped directory as a csv'''
-	with open('results/student_emails.csv', mode='w') as file:
-		email_writer = csv.writer(file)
+	with open('results/student_emails.csv', mode='w', newline='') as file:
+		email_writer = csv.writer(file, delimiter=',')
+		email_writer.writerow(['student email addresses']) # column label(s)
 		for i in range(len(student_emails)):
-			employee_writer.writerow([student_emails[i]])
+			# emails aren't consistent enough to it this way, would need to
+			# grab email in initial request (which is trivial, but don't have time)
+			# first_name = student_emails[i].split('.')[0]
+			email_writer.writerow([student_emails[i]]) # write name, email
 	return
 
 def main():
