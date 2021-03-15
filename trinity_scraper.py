@@ -2,6 +2,9 @@
 import requests
 import pdfminer.high_level as pdf
 import re
+from string import ascii_lowercase as alpha
+import csv
+from tqdm import tqdm
 # import browser_cookie3
 
 def get_dir():
@@ -42,35 +45,60 @@ def query_dir(student_name):
 	response = requests.request("POST", url, headers=headers, data=payload, files=files)
 	return response
 
-def grab_email(student_name = ["Kendall", "H.", "Brown"]):
+def grab_email(student_name):
 	'''given the name of student, returns their email'''
 	# student_name is list in format [first, middle, last]
 	response = query_dir(student_name)
 	# could use bs4 to parse response, but honestly not even necessary
-	email_pattern = '(?:mailto:)[a-z.@]+'
+	# email_pattern = '(?:mailto:)[a-z.@]+'
+	# findall isn't working with non-capturing groups for some reason; can just slice
+	email_pattern = 'mailto:[a-z.@]+'
 	# search for email that comes after "mailto:"
-	match = re.search(email_pattern, response.content.decode())
-	return match.group()
+	# match = re.search(email_pattern, response.content.decode())
+	match = re.findall(email_pattern, response.content.decode()) # find *all* results
+	try: # try to return names (will fail if too many)
+		return match
+	except:
+		return [] # handle no results lazily
 
-def collect_emails(student_list):
+def collect_emails():
 	'''given a list of names, returns a list of emails'''
-	# student_list is in form student x = [student_name, class_year]
-	for i in range(len(student_list)): # loop over all students
-		# grab email for current student using their full name
-		grabbed_email = grab_email(student_list[i][0])
-		# append their email to the sublist, which will be exported later
-		student_list[i].append(grabbed_email)
-	return student_list # return student list with emails added
+	student_emails = []
+	# loop over whole alphabet of last name combos
+	for first in tqdm(alpha):
+		name_fragment = first # build fragment of last name
+		for second in tqdm(alpha):
+			name_fragment += second # build fragment of last name
+			# collect emails for each combo and slice off "mailto:"
+			results = grab_email(["", "", name_fragment])
+			if len(results) == 0:
+				# then further break down the alphabet
+				for third in alpha:
+					name_fragment += third # build fragment of last name
+					# collect emails for each combo and slice off "mailto:"
+					results.extend(grab_email(["", "", name_fragment]))
+				# add all results to master list
+			for i in range(len(results)):
+				# if not an alumni email (alumni emails also have years in them)
+				if not any(x.isdigit() for x in results[i]):
+					student_emails.append(results[i][7:])
+					# print("found: ", results[i][7:]) # print each email found
+	return student_emails
 
-def export_results():
+def export_results(student_emails):
 	'''exports the scraped directory as a csv'''
+	with open('results/student_emails.csv', mode='w') as file:
+		email_writer = csv.writer(file)
+		for i in range(len(student_emails)):
+			employee_writer.writerow([student_emails[i]])
 	return
 
 def main():
-	# get_dir() # download the latest directory as a pdf
-	email = grab_email()
-	print("email grabbed: ", email)
-	ingest_pdf()
+	print("\n\t---- Trinity Email Scraper by Max ----")
+	student_emails = collect_emails()
+	export_results(student_emails)
+	# print(len(student_emails), " emails successfully exported.")
+	print("\n\t  ", len(student_emails), "emails successfully scraped\n")
 
 if __name__ == '__main__':
 	main()
