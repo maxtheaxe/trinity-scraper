@@ -1,6 +1,6 @@
 # trinity-scraper by max
 import requests
-import pdfminer.high_level as pdf
+# import pdfminer.high_level as pdf
 import re
 from string import ascii_lowercase as alpha
 import csv
