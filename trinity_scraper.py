@@ -9,13 +9,14 @@ import time
 
 def query_dir(student_name):
 	'''performs a post request given a url and data, returns response'''
+	# student_name is list in format [last, first, class year]
 	# request built using postman and browser testing
 	url = "https://internet3.trincoll.edu/pTools/Directory_wp.aspx"
 	payload={
-		'txtLastname': student_name[2],
+		'txtLastname': student_name[0],
 		'rblSearchType': 'Student',
-		'txtFirstname': student_name[0],
-		'txtMiddlename': student_name[1],
+		'txtFirstname': student_name[1],
+		'txtMiddlename': '', # may need to be more specific later if this causes issues
 		'btnSubmitSearch': 'Search',
 		'__EVENTTARGET': '',
 		'__EVENTARGUMENT': '',
@@ -30,7 +31,7 @@ def query_dir(student_name):
 
 def grab_email(student_name, slept = 1):
 	'''given the name of student, returns their email'''
-	# student_name is list in format [first, middle, last]
+	# student_name is list in format [last, first, class year]
 	try:
 		response = query_dir(student_name)
 	except: # if request times out
@@ -49,10 +50,23 @@ def grab_email(student_name, slept = 1):
 	for i in range(len(all_links)):
 		if ('mailto:' in all_links[i].get('href')):
 			emails.append(all_links[i].get('href'))
-	return emails # will return list of len 0 if too many or none found
+	# emails.append("no email found") # add error string to end in case no email found
+	return emails # returns list len 0 if none found
 
-def collect_emails():
-	'''given a list of names, returns a list of emails'''
+def collect_emails(student_list):
+	'''returns student list with added email column'''
+	cleaned_student_list = [] # student list including only those who have an email
+	for i in tqdm(range(len(student_list))):
+		email = grab_email(student_list[i]) # grab email for given student
+		if len(email) != 0: # assuming an email was actually found...
+			student_list[i].append(email[0][7:]) # append email to sublist (w/o prefix)
+			cleaned_student_list.append( student_list[i] ) # append to new student list
+		# not sure why some students don't have a school email, maybe handle later
+		# print(student_list[i]) # print current student info
+	return cleaned_student_list
+
+def brute_emails():
+	'''returns a list of emails gathered by trying different last name prefixes'''
 	student_emails = []
 	# loop over whole alphabet of last name combos
 	for first in tqdm(alpha, desc='Overall'): # label overall progress bar
@@ -83,24 +97,58 @@ def collect_emails():
 					# print("found: ", results[i][7:]) # print each email found
 	return student_emails
 
+def scrape_students():
+	'''collects student names from student directory list'''
+	student_list = [] # each entry contains [first, middle, last name, class year]
+	# grab cached version of webpage (google converts pdf to html w alignment data)
+	directory = requests.get('https://webcache.googleusercontent.com/search?q=cache:https://internet3.trincoll.edu/pTools/docs/studph.pdf')
+	# parse response with bs4
+	directory_soup = BeautifulSoup(directory.content, features='html.parser')
+	# grab left-hand column of names (divs w style = 'left:59')
+	student_elements = directory_soup.find_all('div', attrs={'style':re.compile(r'left:59')})
+	# grab right-hand column of names (divs w style = 'left:479')
+	student_elements.extend( directory_soup.find_all('div', attrs={'style':re.compile(r'left:479')}) )
+	# sort out student names and class years
+	name_pattern = '.*, [0-9]{2}' # pattern for finding names in elements
+	# not sure what it means if they don't have a class listed
+	weird_syntax_students = [] # maybe do something with them later?
+	for i in range(len(student_elements)):
+		# searches for [last, first, class] pattern and splits it on ', '
+		try:
+			student_info = re.search(name_pattern, student_elements[i].text).group().split(', ')
+			# strip middle initial, if they have one
+			middle_initial = ' [A-Z]\\.' # space, one capital letter, period
+			# split returns list of split parts, just list of og string if no match found
+			student_info[1] = re.split(middle_initial, student_info[1])[0]
+			student_list.append(student_info) # record student info
+		except AttributeError:
+			# track students w/o class, in case want to handle later
+			weird_syntax_students.append(student_elements[i].text)
+		# print('student: ', student_info)
+	# print(f'there were {len(weird_syntax_students)} students without a class year listed')
+	# print(f'num students collected: {len(student_list)}')
+	return student_list
+
 def export_results(student_emails):
 	'''exports the scraped directory as a csv'''
 	with open('results/student_emails.csv', mode='w', newline='') as file:
 		email_writer = csv.writer(file, delimiter=',')
-		email_writer.writerow(['student email addresses']) # column label(s)
+		email_writer.writerow(['first', 'last', 'class', 'email']) # column label(s)
 		for i in range(len(student_emails)):
-			# emails aren't consistent enough to it this way, would need to
-			# grab email in initial request (which is trivial, but don't have time)
-			# first_name = student_emails[i].split('.')[0]
-			email_writer.writerow([student_emails[i]]) # write name, email
+			# student_name is list in format [last, first, class year, email]
+			first = student_emails[i][1]
+			last = student_emails[i][0]
+			class_year = student_emails[i][2]
+			email = student_emails[i][3]
+			email_writer.writerow([first, last, class_year, email]) # write name, email
 	return
 
 def main():
 	print("\n\t---- Trinity Email Scraper by Max ----")
-	# starting_point = launcher() # maybe handle progress thus far in case of crashes
-	student_emails = collect_emails()
+	student_list = scrape_students()
+	student_emails = collect_emails(student_list)
 	export_results(student_emails)
-	print("\n\t  ", len(student_emails), "emails successfully scraped\n")
+	print(f"\n\t  {len(student_emails)} emails successfully scraped\n")
 
 if __name__ == '__main__':
 	main()
